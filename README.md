@@ -1,6 +1,6 @@
 # Jvision Mentor Problems
 
-Jvision Lab 멘토가 출제하는 코딩 문제와 학생 제출 답안을 관리하는 저장소입니다.
+Jvision Lab 멘토가 출제하는 코딩 문제와 학생 답안을 관리하는 저장소입니다.
 
 ## 구조
 
@@ -10,14 +10,14 @@ problems/
   problem002.md
 
 answer/
-  001/
+  problem001/
     github-id.py
-  002/
+  problem002/
     github-id.py
 ```
 
 - `problems/`: 문제 설명 파일 모음
-- `answer/{번호}/`: 해당 문제의 학생 답안 모음
+- `answer/problem{번호}/`: 해당 문제의 학생 답안 모음
 
 ## 브랜치 규칙
 
@@ -33,7 +33,7 @@ answer/
 
 1. 학생은 자신의 브랜치에서만 작업합니다.
 2. 문제 설명은 `problems/problem{번호}.md` 에서 확인합니다.
-3. 답안은 `answer/{번호}/{github-id}.py` 형식으로 추가합니다.
+3. 답안은 `answer/problem{번호}/{github-id}.py` 형식으로 추가합니다.
 4. 작업 후 `master` 대상으로 Pull Request를 생성합니다.
 
 ## 리뷰 규칙

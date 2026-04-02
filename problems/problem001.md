@@ -14,8 +14,8 @@
 
 ## 답안 위치
 
-- `answer/001/{github-id}.py`
+- `answer/problem001/{github-id}.py`
 
 예시:
 
-- `answer/001/minsu.py`
+- `answer/problem001/minsu.py`

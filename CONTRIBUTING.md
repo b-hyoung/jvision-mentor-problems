@@ -24,9 +24,9 @@
 
 ## 답안 파일 규칙
 
-- 답안 위치: `answer/{번호}/`
+- 답안 위치: `answer/problem{번호}/`
 - 파일명: `{github-id}.py`
-- 예시: `answer/001/minsu.py`
+- 예시: `answer/problem001/minsu.py`
 
 여러 언어를 허용할 경우 확장자만 언어에 맞게 변경합니다.
 
