@@ -39,6 +39,5 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
           CHANGED_FILES: ${{ steps.changed-files.outputs.files }}
         run: python .github/scripts/check_answer.py

@@ -1,7 +1,6 @@
 import os
 import re
-import json
-import urllib.request
+import subprocess
 from openai import OpenAI
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -74,20 +73,12 @@ if not comments:
     print("검토할 파일 없음. 종료.")
     exit(0)
 
-# PR에 코멘트 작성
 body = "## 🤖 AI 답안 검토 결과\n\n" + "\n\n---\n\n".join(comments)
 
 pr_number = os.environ["PR_NUMBER"]
-repo = os.environ["REPO"]
-token = os.environ["GH_TOKEN"]
 
-url = f"https://api.github.com/repos/{repo}/issues/{pr_number}/comments"
-data = json.dumps({"body": body}).encode()
-
-req = urllib.request.Request(url, data=data, method="POST")
-req.add_header("Authorization", f"Bearer {token}")
-req.add_header("Content-Type", "application/json")
-req.add_header("Accept", "application/vnd.github+json")
-
-urllib.request.urlopen(req)
+subprocess.run(
+    ["gh", "pr", "comment", pr_number, "--body", body],
+    check=True
+)
 print("PR 코멘트 작성 완료!")
