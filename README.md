@@ -46,4 +46,3 @@ a
 
 자세한 운영 규칙은 [CONTRIBUTING.md](./CONTRIBUTING.md)에서 확인합니다.
 
-1312333122312
