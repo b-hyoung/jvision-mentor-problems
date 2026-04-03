@@ -18,7 +18,7 @@ answer/
 
 - `problems/`: 문제 설명 파일 모음
 - `answer/problem{번호}/`: 해당 문제의 학생 답안 모음
-
+a
 ## 브랜치 규칙
 
 - 학생 브랜치: `student/{github-id}/problem-{번호}`
