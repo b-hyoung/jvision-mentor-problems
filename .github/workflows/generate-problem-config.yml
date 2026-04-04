@@ -1,0 +1,61 @@
+name: 문제 config 자동 생성
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'problems/*.md'
+
+jobs:
+  generate-config:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: 새로 추가된 문제 파일 감지
+        id: new-problems
+        run: |
+          FILES=$(git diff --name-only HEAD~1 HEAD \
+            | grep '^problems/.*\.md$' \
+            | while read f; do
+                NAME=$(basename "$f" .md)
+                CONFIG=".github/problem-configs/${NAME}.json"
+                if [ ! -f "$CONFIG" ]; then
+                  echo "$f"
+                fi
+              done || true)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Python 설정
+        if: steps.new-problems.outputs.files != ''
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 의존성 설치
+        if: steps.new-problems.outputs.files != ''
+        run: pip install openai
+
+      - name: config 자동 생성
+        if: steps.new-problems.outputs.files != ''
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          NEW_PROBLEM_FILES: ${{ steps.new-problems.outputs.files }}
+        run: python .github/scripts/generate_config.py
+
+      - name: 생성된 config 커밋
+        if: steps.new-problems.outputs.files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/problem-configs/
+          git diff --cached --quiet || git commit -m "chore: auto-generate problem config"
+          git push
