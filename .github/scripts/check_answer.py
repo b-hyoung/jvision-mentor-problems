@@ -1,3 +1,4 @@
+import html
 import json
 import os
 import re
@@ -77,12 +78,16 @@ def run_code(filepath, input_data, timeout=5):
 
 def format_table_cell(value):
     text = "" if value is None else str(value)
-    text = text.replace("|", "\\|")
     text = text.replace("\r\n", "\n").replace("\r", "\n")
-    text = text.replace("\n", "<br>")
     if text == "":
-        return "` `"
-    return f"`{text}`"
+        return "&nbsp;"
+
+    if "\n" in text:
+        escaped = html.escape(text)
+        return f"<pre>{escaped}</pre>"
+
+    escaped = html.escape(text).replace("|", "&#124;")
+    return f"`{escaped}`"
 
 
 def load_discord_mentions():
@@ -144,6 +149,10 @@ def load_config(problem_name):
 
 
 def generate_edge_cases(problem_content, basic_cases, config, language):
+    static_edge_cases = config.get("edge_cases")
+    if static_edge_cases:
+        return static_edge_cases
+
     edge_strategy = config.get("edge_case_strategy", "경계값, 예외 상황 위주로 3개 이내 생성.")
     response = client.chat.completions.create(
         model="gpt-4o-mini",
@@ -156,6 +165,7 @@ def generate_edge_cases(problem_content, basic_cases, config, language):
                     f"## 문제\n{problem_content}\n\n"
                     f"## 기본 테스트케이스\n{json.dumps(basic_cases, ensure_ascii=False)}\n\n"
                     f"## 엣지케이스 전략\n{edge_strategy}\n\n"
+                    f"출력에 줄바꿈이 있으면 반드시 \\n 으로 표기하세요.\n"
                     f"아래 JSON 형식으로만 답하세요. 다른 설명 없이 JSON만:\n"
                     f'[{{"input": "값", "output": "기대출력"}}]'
                 ),
