@@ -50,7 +50,19 @@ for filepath in new_files:
     try:
         with urllib.request.urlopen(req) as resp:
             result = json.loads(resp.read())
-            print(f"✅ 퀴즈 등록 완료: {title} → quiz id={result['quiz']['id']}")
+            quiz_id = result["quiz"]["id"]
+            print(f"✅ 퀴즈 등록 완료: {title} → quiz id={quiz_id}")
+
+            # config 파일에 cartel_quiz_id 자동 기록
+            problem_name = os.path.splitext(os.path.basename(filepath))[0]
+            config_path = f".github/problem-configs/{problem_name}.json"
+            if os.path.exists(config_path):
+                with open(config_path, encoding="utf-8") as f:
+                    config = json.load(f)
+                config["cartel_quiz_id"] = quiz_id
+                with open(config_path, "w", encoding="utf-8") as f:
+                    json.dump(config, f, ensure_ascii=False, indent=2)
+                print(f"✅ {config_path} 에 cartel_quiz_id={quiz_id} 기록 완료")
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         print(f"❌ 퀴즈 등록 실패 ({filepath}): {e.code} {body}")

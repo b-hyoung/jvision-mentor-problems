@@ -67,3 +67,12 @@ jobs:
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           NEW_PROBLEM_FILES: ${{ steps.new-problems.outputs.files }}
         run: python .github/scripts/register_quiz.py
+
+      - name: quiz_id 기록된 config 커밋
+        if: steps.new-problems.outputs.files != ''
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .github/problem-configs/
+          git diff --cached --quiet || git commit -m "chore: record cartel_quiz_id in problem config"
+          git push
