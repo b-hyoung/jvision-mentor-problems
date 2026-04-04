@@ -8,7 +8,7 @@ import json
 import urllib.request
 
 CARTEL_API_URL = os.environ["CARTEL_API_URL"].rstrip("/")
-WEBHOOK_SECRET = os.environ["GITHUB_WEBHOOK_SECRET"]
+WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
 merged_files_raw = os.environ.get("MERGED_FILES", "").strip()
 merged_files = [f for f in merged_files_raw.split("\n") if f.strip()]
 

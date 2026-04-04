@@ -64,6 +64,6 @@ jobs:
         if: steps.new-problems.outputs.files != ''
         env:
           CARTEL_API_URL: ${{ secrets.CARTEL_API_URL }}
-          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           NEW_PROBLEM_FILES: ${{ steps.new-problems.outputs.files }}
         run: python .github/scripts/register_quiz.py
