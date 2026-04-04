@@ -1,4 +1,3 @@
-import html
 import json
 import os
 import re
@@ -76,18 +75,31 @@ def run_code(filepath, input_data, timeout=5):
         return None, str(e)
 
 
-def format_table_cell(value):
+def format_inline_code(value):
+    text = "" if value is None else str(value)
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("|", "\\|")
+    if text == "":
+        return "` `"
+    if "\n" in text:
+        return "`멀티라인 출력`"
+    return f"`{text}`"
+
+
+def format_output_block(title, value):
     text = "" if value is None else str(value)
     text = text.replace("\r\n", "\n").replace("\r", "\n")
     if text == "":
-        return "&nbsp;"
+        text = "(빈 출력)"
+    return f"**{title}**\n```text\n{text}\n```"
 
-    if "\n" in text:
-        escaped = html.escape(text)
-        return f"<pre>{escaped}</pre>"
 
-    escaped = html.escape(text).replace("|", "&#124;")
-    return f"`{escaped}`"
+def format_failed_case(case):
+    return (
+        f"- 입력: `{case['input']}`\n"
+        f"{format_output_block('기대 출력', case['expected'])}\n"
+        f"{format_output_block('실제 출력', case['actual'])}"
+    )
 
 
 def load_discord_mentions():
@@ -264,18 +276,11 @@ for filepath in changed_files:
             passed = actual == expected
 
         icon = "✅" if passed else "❌"
-        basic_rows.append(
-            f"| {format_table_cell(tc['input'])} | {format_table_cell(expected)} | "
-            f"{format_table_cell(actual)} | {icon} |"
-        )
+        basic_rows.append(f"| {format_inline_code(tc['input'])} | {icon} |")
         if not passed:
             basic_failed.append({"input": tc["input"], "expected": expected, "actual": actual})
 
-    basic_table = (
-        "| 입력 | 기대 출력 | 실제 출력 | 결과 |\n"
-        "|------|-----------|-----------|------|\n"
-        + "\n".join(basic_rows)
-    )
+    basic_table = "| 입력 | 결과 |\n|------|------|\n" + "\n".join(basic_rows)
 
     edge_section = ""
     all_failed = basic_failed[:]
@@ -284,6 +289,7 @@ for filepath in changed_files:
         try:
             edge_cases = generate_edge_cases(problem_content, basic_cases, config, language)
             edge_rows = []
+            edge_failed = []
 
             for tc in edge_cases:
                 actual, err = run_code(filepath, tc["input"])
@@ -295,14 +301,26 @@ for filepath in changed_files:
                     passed = actual == expected
 
                 icon = "✅" if passed else "❌"
-                edge_rows.append(f"| {format_table_cell(tc['input'])} | {icon} |")
+                edge_rows.append(f"| {format_inline_code(tc['input'])} | {icon} |")
                 if not passed:
-                    all_failed.append({"input": tc["input"], "expected": expected, "actual": actual})
+                    failed_case = {"input": tc["input"], "expected": expected, "actual": actual}
+                    edge_failed.append(failed_case)
+                    all_failed.append(failed_case)
 
             edge_table = "| 입력 | 결과 |\n|------|------|\n" + "\n".join(edge_rows)
             edge_section = f"\n\n### AI 심화 테스트\n{edge_table}"
+            if edge_failed:
+                edge_section += "\n\n### AI 심화 테스트 실패 상세\n" + "\n\n".join(
+                    format_failed_case(case) for case in edge_failed
+                )
         except Exception as e:
             edge_section = f"\n\n### AI 심화 테스트\n⚠️ 생성 실패: {e}"
+
+    detail_section = ""
+    if basic_failed:
+        detail_section = "\n\n### 기본 테스트 실패 상세\n" + "\n\n".join(
+            format_failed_case(case) for case in basic_failed
+        )
 
     if all_failed:
         try:
@@ -318,6 +336,7 @@ for filepath in changed_files:
     comment = (
         f"### `{filepath}` — **{student_id}** ({language})\n\n"
         f"#### 기본 테스트\n{basic_table}"
+        f"{detail_section}"
         f"{edge_section}"
         f"{hint_section}"
     )
