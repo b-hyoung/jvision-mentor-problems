@@ -30,7 +30,7 @@ def run_python(filepath, input_data, timeout=5):
     if result.returncode != 0:
         error_text = (result.stderr or result.stdout or "실행 오류").strip()
         return None, f"실행 오류: {error_text}"
-    return result.stdout.strip(), None
+    return result.stdout.rstrip(), None
 
 
 def run_c(filepath, input_data, timeout=5):
@@ -56,7 +56,7 @@ def run_c(filepath, input_data, timeout=5):
         if result.returncode != 0:
             error_text = (result.stderr or result.stdout or "실행 오류").strip()
             return None, f"실행 오류: {error_text}"
-        return result.stdout.strip(), None
+        return result.stdout.rstrip(), None
 
 
 def run_code(filepath, input_data, timeout=5):
@@ -73,6 +73,16 @@ def run_code(filepath, input_data, timeout=5):
         return None, "시간 초과 (5초)"
     except Exception as e:
         return None, str(e)
+
+
+def format_table_cell(value):
+    text = "" if value is None else str(value)
+    text = text.replace("|", "\\|")
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\n", "<br>")
+    if text == "":
+        return "` `"
+    return f"`{text}`"
 
 
 def load_discord_mentions():
@@ -111,7 +121,7 @@ def send_discord(webhook_url, pr_author, problem_name, pr_url):
                 ],
                 "footer": {"text": "Jvision Mentor Problems"},
             }
-        ]
+        ],
     }
     body = json.dumps(payload).encode("utf-8")
     conn = http.client.HTTPSConnection(parsed.netloc, context=ssl.create_default_context())
@@ -236,16 +246,20 @@ for filepath in changed_files:
 
     for tc in basic_cases:
         actual, err = run_code(filepath, tc["input"])
+        expected = tc["output"].strip()
         if err:
             actual = err
             passed = False
         else:
-            passed = actual == tc["output"].strip()
+            passed = actual == expected
 
         icon = "✅" if passed else "❌"
-        basic_rows.append(f"| `{tc['input']}` | `{tc['output']}` | `{actual}` | {icon} |")
+        basic_rows.append(
+            f"| {format_table_cell(tc['input'])} | {format_table_cell(expected)} | "
+            f"{format_table_cell(actual)} | {icon} |"
+        )
         if not passed:
-            basic_failed.append({"input": tc["input"], "expected": tc["output"], "actual": actual})
+            basic_failed.append({"input": tc["input"], "expected": expected, "actual": actual})
 
     basic_table = (
         "| 입력 | 기대 출력 | 실제 출력 | 결과 |\n"
@@ -263,16 +277,17 @@ for filepath in changed_files:
 
             for tc in edge_cases:
                 actual, err = run_code(filepath, tc["input"])
+                expected = tc["output"].strip()
                 if err:
                     actual = err
                     passed = False
                 else:
-                    passed = actual == tc["output"].strip()
+                    passed = actual == expected
 
                 icon = "✅" if passed else "❌"
-                edge_rows.append(f"| `{tc['input']}` | {icon} |")
+                edge_rows.append(f"| {format_table_cell(tc['input'])} | {icon} |")
                 if not passed:
-                    all_failed.append({"input": tc["input"], "expected": tc["output"], "actual": actual})
+                    all_failed.append({"input": tc["input"], "expected": expected, "actual": actual})
 
             edge_table = "| 입력 | 결과 |\n|------|------|\n" + "\n".join(edge_rows)
             edge_section = f"\n\n### AI 심화 테스트\n{edge_table}"
