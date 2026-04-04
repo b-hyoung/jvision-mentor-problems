@@ -25,8 +25,18 @@ def run_code(filepath, input_data, timeout=5):
         return None, str(e)
 
 
-def generate_edge_cases(problem_content, basic_cases):
+def load_config(problem_name):
+    """문제별 AI 전용 설정 로드. 없으면 빈 dict 반환."""
+    config_path = f".github/problem-configs/{problem_name}.json"
+    if os.path.exists(config_path):
+        with open(config_path, encoding="utf-8") as f:
+            return json.load(f)
+    return {}
+
+
+def generate_edge_cases(problem_content, basic_cases, config):
     """GPT로 엣지케이스 생성."""
+    edge_strategy = config.get("edge_case_strategy", "경계값, 예외 상황 위주로 3개 이내 생성.")
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=512,
@@ -37,7 +47,7 @@ def generate_edge_cases(problem_content, basic_cases):
                     f"아래 문제와 기본 테스트케이스를 보고, 학생 코드를 검증할 추가 엣지케이스를 생성해주세요.\n\n"
                     f"## 문제\n{problem_content}\n\n"
                     f"## 기본 테스트케이스\n{json.dumps(basic_cases, ensure_ascii=False)}\n\n"
-                    f"힌트 가이드에 있는 엣지케이스 기준을 참고하세요.\n"
+                    f"## 엣지케이스 전략\n{edge_strategy}\n\n"
                     f"아래 JSON 형식으로만 답하세요. 다른 설명 없이 JSON만:\n"
                     f'[{{"input": "값", "output": "기대출력"}}]'
                 ),
@@ -50,8 +60,9 @@ def generate_edge_cases(problem_content, basic_cases):
     return json.loads(raw)
 
 
-def generate_hint(problem_content, failed_cases):
+def generate_hint(problem_content, failed_cases, config):
     """실패한 테스트케이스 기반으로 힌트 생성."""
+    hint_guide = config.get("hint_guide", "답을 직접 알려주지 말고 방향만 제시할 것.")
     failed_summary = "\n".join(
         [f"- 입력: {c['input']} → 기대: {c['expected']} / 실제: {c['actual']}" for c in failed_cases]
     )
@@ -62,10 +73,10 @@ def generate_hint(problem_content, failed_cases):
             {
                 "role": "user",
                 "content": (
-                    f"아래 문제에서 학생 코드가 일부 테스트를 통과하지 못했습니다.\n"
-                    f"힌트 가이드를 참고해서 답을 알려주지 말고 방향만 제시해주세요.\n\n"
+                    f"아래 문제에서 학생 코드가 일부 테스트를 통과하지 못했습니다.\n\n"
                     f"## 문제\n{problem_content}\n\n"
                     f"## 실패한 테스트\n{failed_summary}\n\n"
+                    f"## 힌트 가이드\n{hint_guide}\n\n"
                     f"2~3줄로 간결하게 힌트만 작성하세요."
                 ),
             }
@@ -106,6 +117,8 @@ for filepath in changed_files:
     with open(problem_path, encoding="utf-8") as f:
         problem_content = f.read()
 
+    config = load_config(problem_name)
+
     # 테스트케이스 파싱
     tc_match = re.search(r'```json\s*(\[.*?\])\s*```', problem_content, re.DOTALL)
     if not tc_match:
@@ -145,7 +158,7 @@ for filepath in changed_files:
 
     if not basic_failed:
         try:
-            edge_cases = generate_edge_cases(problem_content, basic_cases)
+            edge_cases = generate_edge_cases(problem_content, basic_cases, config)
             edge_rows = []
             edge_failed = []
 
@@ -177,7 +190,7 @@ for filepath in changed_files:
     hint_section = ""
     if all_failed:
         try:
-            hint = generate_hint(problem_content, all_failed)
+            hint = generate_hint(problem_content, all_failed, config)
             hint_section = f"\n\n**💡 힌트**\n{hint}"
         except Exception as e:
             hint_section = f"\n\n**💡 힌트** 생성 실패: {e}"
