@@ -21,7 +21,13 @@ jobs:
       - name: 새로 추가된 문제 파일 감지
         id: new-problems
         run: |
-          FILES=$(git diff --name-only HEAD~1 HEAD \
+          # 첫 커밋인 경우 HEAD~1이 없으므로 분기 처리
+          if git rev-parse HEAD~1 >/dev/null 2>&1; then
+            CHANGED=$(git diff --name-only HEAD~1 HEAD)
+          else
+            CHANGED=$(git diff --name-only --diff-filter=A HEAD)
+          fi
+          FILES=$(echo "$CHANGED" \
             | grep '^problems/.*\.md$' \
             | while read f; do
                 NAME=$(basename "$f" .md)
