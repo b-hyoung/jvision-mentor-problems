@@ -2,7 +2,7 @@ import os
 import re
 import json
 import subprocess
-import tempfile
+import urllib.request
 from openai import OpenAI
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
@@ -23,6 +23,17 @@ def run_code(filepath, input_data, timeout=5):
         return None, "시간 초과 (5초)"
     except Exception as e:
         return None, str(e)
+
+
+def send_discord(webhook_url, message):
+    """Discord 웹훅으로 메시지 전송."""
+    data = json.dumps({"content": message}).encode()
+    req = urllib.request.Request(webhook_url, data=data, method="POST")
+    req.add_header("Content-Type", "application/json")
+    try:
+        urllib.request.urlopen(req)
+    except Exception as e:
+        print(f"Discord 전송 실패: {e}")
 
 
 def load_config(problem_name):
@@ -95,6 +106,9 @@ if not changed_files:
     exit(0)
 
 pr_number = os.environ["PR_NUMBER"]
+pr_author = os.environ.get("PR_AUTHOR", "알 수 없음")
+pr_url = os.environ.get("PR_URL", "")
+discord_webhook = os.environ.get("DISCORD_WEBHOOK_URL", "")
 all_comments = []
 
 for filepath in changed_files:
@@ -196,6 +210,14 @@ for filepath in changed_files:
             hint_section = f"\n\n**💡 힌트** 생성 실패: {e}"
     else:
         hint_section = "\n\n**🎉 모든 테스트 통과!** 잘 했어요."
+        if discord_webhook:
+            send_discord(
+                discord_webhook,
+                f"✅ **AI 검토 통과!**\n"
+                f"> 제출자: `{pr_author}`\n"
+                f"> 문제: `{problem_name}`\n"
+                f"> PR: {pr_url}"
+            )
 
     comment = (
         f"### `{filepath}` — **{student_id}**\n\n"
