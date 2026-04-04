@@ -59,3 +59,11 @@ jobs:
           git add .github/problem-configs/
           git diff --cached --quiet || git commit -m "chore: auto-generate problem config"
           git push
+
+      - name: Cartel_Lab에 퀴즈 등록
+        if: steps.new-problems.outputs.files != ''
+        env:
+          CARTEL_API_URL: ${{ secrets.CARTEL_API_URL }}
+          GITHUB_WEBHOOK_SECRET: ${{ secrets.GITHUB_WEBHOOK_SECRET }}
+          NEW_PROBLEM_FILES: ${{ steps.new-problems.outputs.files }}
+        run: python .github/scripts/register_quiz.py
