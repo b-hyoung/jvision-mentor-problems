@@ -66,6 +66,7 @@ for filepath in new_files:
         "ai_trap_code": "",
         "ai_trap_answer": "",
         "scheduled_date": scheduled_date,
+        "created_by_github": os.environ.get("GITHUB_ACTOR", ""),
     }
 
     data = json.dumps(payload).encode()

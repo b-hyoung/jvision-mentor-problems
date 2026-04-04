@@ -72,6 +72,7 @@ jobs:
           CARTEL_API_URL: ${{ secrets.CARTEL_API_URL }}
           WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
           NEW_PROBLEM_FILES: ${{ steps.new-problems.outputs.files }}
+          GITHUB_ACTOR: ${{ github.actor }}
         run: python .github/scripts/register_quiz.py
 
       - name: quiz_id 기록된 config 커밋
