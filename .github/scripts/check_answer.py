@@ -25,12 +25,26 @@ def run_code(filepath, input_data, timeout=5):
         return None, str(e)
 
 
-def send_discord(webhook_url, message):
-    """Discord 웹훅으로 메시지 전송."""
+def send_discord(webhook_url, pr_author, problem_name, pr_url):
+    """Discord 웹훅으로 임베드 메시지 전송."""
     import http.client, ssl
     from urllib.parse import urlparse
     parsed = urlparse(webhook_url)
-    body = json.dumps({"content": message}).encode("utf-8")
+    payload = {
+        "embeds": [
+            {
+                "title": "✅ AI 검토 통과!",
+                "color": 0x57F287,
+                "fields": [
+                    {"name": "제출자", "value": f"`{pr_author}`", "inline": True},
+                    {"name": "문제", "value": f"`{problem_name}`", "inline": True},
+                    {"name": "PR", "value": f"[바로가기]({pr_url})", "inline": True},
+                ],
+                "footer": {"text": "Jvision Mentor Problems"},
+            }
+        ]
+    }
+    body = json.dumps(payload).encode("utf-8")
     conn = http.client.HTTPSConnection(parsed.netloc, context=ssl.create_default_context())
     try:
         conn.request("POST", parsed.path, body=body, headers={"Content-Type": "application/json"})
@@ -217,13 +231,7 @@ for filepath in changed_files:
     else:
         hint_section = "\n\n**🎉 모든 테스트 통과!** 잘 했어요."
         if discord_webhook:
-            send_discord(
-                discord_webhook,
-                f"✅ **AI 검토 통과!**\n"
-                f"> 제출자: `{pr_author}`\n"
-                f"> 문제: `{problem_name}`\n"
-                f"> PR: {pr_url}"
-            )
+            send_discord(discord_webhook, pr_author, problem_name, pr_url)
 
     comment = (
         f"### `{filepath}` — **{student_id}**\n\n"
