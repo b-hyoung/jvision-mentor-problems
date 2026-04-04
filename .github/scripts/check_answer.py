@@ -1,9 +1,80 @@
 import os
 import re
+import json
 import subprocess
+import tempfile
 from openai import OpenAI
 
 client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+
+
+def run_code(filepath, input_data, timeout=5):
+    """학생 코드를 실행하고 출력 반환. 실패 시 에러 메시지 반환."""
+    try:
+        result = subprocess.run(
+            ["python", filepath],
+            input=input_data,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        return result.stdout.strip(), None
+    except subprocess.TimeoutExpired:
+        return None, "시간 초과 (5초)"
+    except Exception as e:
+        return None, str(e)
+
+
+def generate_edge_cases(problem_content, basic_cases):
+    """GPT로 엣지케이스 생성."""
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        max_tokens=512,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"아래 문제와 기본 테스트케이스를 보고, 학생 코드를 검증할 추가 엣지케이스를 생성해주세요.\n\n"
+                    f"## 문제\n{problem_content}\n\n"
+                    f"## 기본 테스트케이스\n{json.dumps(basic_cases, ensure_ascii=False)}\n\n"
+                    f"힌트 가이드에 있는 엣지케이스 기준을 참고하세요.\n"
+                    f"아래 JSON 형식으로만 답하세요. 다른 설명 없이 JSON만:\n"
+                    f'[{{"input": "값", "output": "기대출력"}}]'
+                ),
+            }
+        ],
+    )
+    raw = response.choices[0].message.content.strip()
+    # 코드블록 제거
+    raw = re.sub(r"```json|```", "", raw).strip()
+    return json.loads(raw)
+
+
+def generate_hint(problem_content, failed_cases):
+    """실패한 테스트케이스 기반으로 힌트 생성."""
+    failed_summary = "\n".join(
+        [f"- 입력: {c['input']} → 기대: {c['expected']} / 실제: {c['actual']}" for c in failed_cases]
+    )
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        max_tokens=512,
+        messages=[
+            {
+                "role": "user",
+                "content": (
+                    f"아래 문제에서 학생 코드가 일부 테스트를 통과하지 못했습니다.\n"
+                    f"힌트 가이드를 참고해서 답을 알려주지 말고 방향만 제시해주세요.\n\n"
+                    f"## 문제\n{problem_content}\n\n"
+                    f"## 실패한 테스트\n{failed_summary}\n\n"
+                    f"2~3줄로 간결하게 힌트만 작성하세요."
+                ),
+            }
+        ],
+    )
+    return response.choices[0].message.content.strip()
+
+
+# ── 메인 ──────────────────────────────────────────────
 
 changed_files_raw = os.environ.get("CHANGED_FILES", "").strip()
 changed_files = [f for f in changed_files_raw.split("\n") if f.strip()]
@@ -12,70 +83,120 @@ if not changed_files:
     print("변경된 답안 파일 없음. 종료.")
     exit(0)
 
-comments = []
+pr_number = os.environ["PR_NUMBER"]
+all_comments = []
 
 for filepath in changed_files:
-    # answer/problem001/github-id.py 형태에서 문제번호와 학생 ID 추출
     match = re.match(r'answer/(problem\d+)/(.+)', filepath)
     if not match:
         print(f"경로 형식 불일치, 건너뜀: {filepath}")
         continue
 
-    problem_name = match.group(1)       # e.g. problem001
-    student_filename = match.group(2)   # e.g. minsu.py
-    student_id = os.path.splitext(student_filename)[0]
-
+    problem_name = match.group(1)
+    student_id = os.path.splitext(match.group(2))[0]
     problem_path = f"problems/{problem_name}.md"
 
     if not os.path.exists(problem_path):
-        comments.append(
-            f"### `{filepath}`\n"
-            f"⚠️ **{student_id}** — 문제 파일을 찾을 수 없어요: `{problem_path}`"
-        )
+        all_comments.append(f"### `{filepath}`\n⚠️ 문제 파일을 찾을 수 없어요: `{problem_path}`")
         continue
 
     if not os.path.exists(filepath):
-        print(f"답안 파일 없음, 건너뜀: {filepath}")
         continue
 
     with open(problem_path, encoding="utf-8") as f:
         problem_content = f.read()
 
-    with open(filepath, encoding="utf-8") as f:
-        answer_content = f.read()
+    # 테스트케이스 파싱
+    tc_match = re.search(r'```json\s*(\[.*?\])\s*```', problem_content, re.DOTALL)
+    if not tc_match:
+        all_comments.append(f"### `{filepath}`\n⚠️ 문제 파일에 테스트 케이스가 없어요.")
+        continue
+
+    basic_cases = json.loads(tc_match.group(1))
 
     print(f"검토 중: {filepath}")
 
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        max_tokens=1024,
-        messages=[
-            {
-                "role": "user",
-                "content": (
-                    f"아래는 코딩 문제와 학생의 답안입니다.\n"
-                    f"답안이 문제 요구사항을 올바르게 충족하는지 검토해주세요.\n\n"
-                    f"## 문제 ({problem_name})\n{problem_content}\n\n"
-                    f"## 학생 답안 (`{student_id}`)\n```\n{answer_content}\n```\n\n"
-                    f"아래 형식으로만 답해주세요:\n"
-                    f"- **결과**: 정답 ✅ 또는 오답 ❌\n"
-                    f"- **이유**: 2~3줄 설명\n"
-                    f"- **피드백**: 개선할 점 (없으면 생략)"
-                ),
-            }
-        ],
+    # ── 1단계: 기본 테스트 ──
+    basic_rows = []
+    basic_failed = []
+
+    for tc in basic_cases:
+        actual, err = run_code(filepath, tc["input"])
+        if err:
+            actual = f"오류: {err}"
+            passed = False
+        else:
+            passed = actual == tc["output"].strip()
+
+        icon = "✅" if passed else "❌"
+        basic_rows.append(f"| `{tc['input']}` | `{tc['output']}` | `{actual}` | {icon} |")
+        if not passed:
+            basic_failed.append({"input": tc["input"], "expected": tc["output"], "actual": actual})
+
+    basic_table = (
+        "| 입력 | 기대 출력 | 실제 출력 | 결과 |\n"
+        "|------|-----------|-----------|------|\n"
+        + "\n".join(basic_rows)
     )
 
-    ai_response = response.choices[0].message.content
-    comments.append(f"### `{filepath}`\n\n{ai_response}")
+    # ── 2단계: AI 심화 테스트 (기본 통과한 경우만) ──
+    edge_section = ""
+    all_failed = basic_failed[:]
 
-if not comments:
+    if not basic_failed:
+        try:
+            edge_cases = generate_edge_cases(problem_content, basic_cases)
+            edge_rows = []
+            edge_failed = []
+
+            for tc in edge_cases:
+                actual, err = run_code(filepath, tc["input"])
+                if err:
+                    actual = f"오류: {err}"
+                    passed = False
+                else:
+                    passed = actual == tc["output"].strip()
+
+                icon = "✅" if passed else "❌"
+                # 심화 테스트는 입력값과 결과만 공개 (기대 출력 숨김)
+                edge_rows.append(f"| `{tc['input']}` | {icon} |")
+                if not passed:
+                    edge_failed.append({"input": tc["input"], "expected": tc["output"], "actual": actual})
+                    all_failed.append({"input": tc["input"], "expected": tc["output"], "actual": actual})
+
+            edge_table = (
+                "| 입력 | 결과 |\n"
+                "|------|------|\n"
+                + "\n".join(edge_rows)
+            )
+            edge_section = f"\n\n### AI 심화 테스트\n{edge_table}"
+        except Exception as e:
+            edge_section = f"\n\n### AI 심화 테스트\n⚠️ 생성 실패: {e}"
+
+    # ── 3단계: 힌트 생성 ──
+    hint_section = ""
+    if all_failed:
+        try:
+            hint = generate_hint(problem_content, all_failed)
+            hint_section = f"\n\n**💡 힌트**\n{hint}"
+        except Exception as e:
+            hint_section = f"\n\n**💡 힌트** 생성 실패: {e}"
+    else:
+        hint_section = "\n\n**🎉 모든 테스트 통과!** 잘 했어요."
+
+    comment = (
+        f"### `{filepath}` — **{student_id}**\n\n"
+        f"#### 기본 테스트\n{basic_table}"
+        f"{edge_section}"
+        f"{hint_section}"
+    )
+    all_comments.append(comment)
+
+if not all_comments:
     print("검토할 파일 없음. 종료.")
     exit(0)
 
-body = "## 🤖 AI 답안 검토 결과\n\n" + "\n\n---\n\n".join(comments)
-
-pr_number = os.environ["PR_NUMBER"]
+body = "## 🤖 AI 답안 검토 결과\n\n" + "\n\n---\n\n".join(all_comments)
 
 subprocess.run(
     ["gh", "pr", "comment", pr_number, "--body", body],
