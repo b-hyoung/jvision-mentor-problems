@@ -44,7 +44,7 @@ git checkout -b mentor/hyung/problem-002
 ```
 
 ## 답안 위치
-- `answer/problem002/{github-id}.py`
+- `answer/problem002/{파일명}.py` (파일명 자유, PR 작성자 기준으로 정답 처리)
 ```
 
 ### 섹션 설명

@@ -61,7 +61,7 @@ answer/
 
 ```
 1. student/{github-id}/problem-{번호} 브랜치 생성
-2. answer/problem{번호}/{github-id}.py 작성
+2. answer/problem{번호}/{파일명}.py 작성 (파일명 자유)
 3. master 대상으로 PR 생성
         ↓ (자동)
 4. AI가 기본 테스트케이스 실행 후 결과 코멘트
