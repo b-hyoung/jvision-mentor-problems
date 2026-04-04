@@ -27,13 +27,19 @@ def run_code(filepath, input_data, timeout=5):
 
 def send_discord(webhook_url, message):
     """Discord 웹훅으로 메시지 전송."""
-    data = json.dumps({"content": message}).encode()
-    req = urllib.request.Request(webhook_url, data=data, method="POST")
-    req.add_header("Content-Type", "application/json")
+    import http.client, ssl
+    from urllib.parse import urlparse
+    parsed = urlparse(webhook_url)
+    body = json.dumps({"content": message}).encode("utf-8")
+    conn = http.client.HTTPSConnection(parsed.netloc, context=ssl.create_default_context())
     try:
-        urllib.request.urlopen(req)
+        conn.request("POST", parsed.path, body=body, headers={"Content-Type": "application/json"})
+        resp = conn.getresponse()
+        print(f"Discord 전송 결과: {resp.status} {resp.reason}")
     except Exception as e:
         print(f"Discord 전송 실패: {e}")
+    finally:
+        conn.close()
 
 
 def load_config(problem_name):
