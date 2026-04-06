@@ -16,6 +16,10 @@ def detect_language(filepath):
         return "Python"
     if ext == ".c":
         return "C"
+    if ext == ".cpp":
+        return "C++"
+    if ext == ".java":
+        return "Java"
     return None
 
 
@@ -59,6 +63,61 @@ def run_c(filepath, input_data, timeout=5):
         return result.stdout.rstrip(), None
 
 
+def run_java(filepath, input_data, timeout=10):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        import shutil
+        shutil.copy(filepath, temp_dir)
+        filename = os.path.basename(filepath)
+        compile_result = subprocess.run(
+            ["javac", os.path.join(temp_dir, filename)],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if compile_result.returncode != 0:
+            error_text = (compile_result.stderr or compile_result.stdout or "컴파일 오류").strip()
+            return None, f"컴파일 오류: {error_text}"
+
+        classname = os.path.splitext(filename)[0]
+        result = subprocess.run(
+            ["java", "-cp", temp_dir, classname],
+            input=input_data,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if result.returncode != 0:
+            error_text = (result.stderr or result.stdout or "실행 오류").strip()
+            return None, f"실행 오류: {error_text}"
+        return result.stdout.rstrip(), None
+
+
+def run_cpp(filepath, input_data, timeout=5):
+    with tempfile.TemporaryDirectory() as temp_dir:
+        exe_path = os.path.join(temp_dir, "student.out")
+        compile_result = subprocess.run(
+            ["g++", filepath, "-O2", "-std=c++17", "-o", exe_path],
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if compile_result.returncode != 0:
+            error_text = (compile_result.stderr or compile_result.stdout or "컴파일 오류").strip()
+            return None, f"컴파일 오류: {error_text}"
+
+        result = subprocess.run(
+            [exe_path],
+            input=input_data,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
+        )
+        if result.returncode != 0:
+            error_text = (result.stderr or result.stdout or "실행 오류").strip()
+            return None, f"실행 오류: {error_text}"
+        return result.stdout.rstrip(), None
+
+
 def run_code(filepath, input_data, timeout=5):
     language = detect_language(filepath)
     try:
@@ -66,6 +125,10 @@ def run_code(filepath, input_data, timeout=5):
             return run_python(filepath, input_data, timeout=timeout)
         if language == "C":
             return run_c(filepath, input_data, timeout=timeout)
+        if language == "C++":
+            return run_cpp(filepath, input_data, timeout=timeout)
+        if language == "Java":
+            return run_java(filepath, input_data, timeout=timeout)
         return None, f"지원하지 않는 파일 형식입니다: {os.path.splitext(filepath)[1]}"
     except FileNotFoundError:
         return None, "실행에 필요한 명령어를 찾을 수 없어요."
