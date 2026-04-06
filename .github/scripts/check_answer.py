@@ -203,55 +203,90 @@ def parse_basic_cases(problem_content):
     return cases or None
 
 
-def generate_edge_cases(problem_content, basic_cases, config, language):
+def generate_edge_inputs(problem_content, basic_cases, config):
     static_edge_cases = config.get("edge_cases")
     if static_edge_cases:
-        return static_edge_cases
+        return static_edge_cases, True  # (cases, is_static)
 
     edge_strategy = config.get("edge_case_strategy", "경계값, 예외 상황 위주로 3개 이내 생성.")
     response = client.chat.completions.create(
         model="gpt-4o-mini",
-        max_tokens=512,
+        max_tokens=256,
         messages=[
             {
                 "role": "user",
                 "content": (
-                    f"아래 문제와 기본 테스트케이스를 보고, 학생의 {language} 답안을 검증할 추가 엣지케이스를 생성해주세요.\n\n"
+                    f"아래 문제와 기본 테스트케이스를 보고, 추가로 검증할 엣지케이스 입력값만 생성해주세요.\n\n"
                     f"## 문제\n{problem_content}\n\n"
                     f"## 기본 테스트케이스\n{json.dumps(basic_cases, ensure_ascii=False)}\n\n"
                     f"## 엣지케이스 전략\n{edge_strategy}\n\n"
-                    f"출력에 줄바꿈이 있으면 반드시 \\n 으로 표기하세요.\n"
                     f"아래 JSON 형식으로만 답하세요. 다른 설명 없이 JSON만:\n"
-                    f'[{{"input": "값", "output": "기대출력"}}]'
+                    f'[{{"input": "입력값"}}]'
                 ),
             }
         ],
     )
     raw = response.choices[0].message.content.strip()
     raw = re.sub(r"```json|```", "", raw).strip()
-    return json.loads(raw)
+    return json.loads(raw), False  # (cases, is_static)
+
+
+def verify_output(problem_content, input_data, actual_output):
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        max_tokens=64,
+        messages=[
+            {
+                "role": "system",
+                "content": (
+                    "당신은 코딩 문제 채점기입니다. "
+                    "학생의 출력이 문제 요구사항을 정확히 만족하는지만 판단하세요. "
+                    "반드시 첫 줄에 PASS 또는 FAIL 중 하나만 출력하세요."
+                ),
+            },
+            {
+                "role": "user",
+                "content": (
+                    f"## 문제\n{problem_content}\n\n"
+                    f"## 입력\n{input_data}\n\n"
+                    f"## 학생 출력\n{actual_output}\n\n"
+                    f"이 출력이 정확한지 PASS 또는 FAIL로만 답하세요."
+                ),
+            },
+        ],
+    )
+    verdict = response.choices[0].message.content.strip().upper()
+    return verdict.startswith("PASS")
 
 
 def generate_hint(problem_content, failed_cases, config, language):
     hint_guide = config.get("hint_guide", "답을 직접 알려주지 말고 방향만 제시할 것.")
     failed_summary = "\n".join(
-        [f"- 입력: {c['input']} → 기대: {c['expected']} / 실제: {c['actual']}" for c in failed_cases]
+        [f"- 입력: {c['input']} → 실제 출력: {c['actual']}" for c in failed_cases]
     )
     response = client.chat.completions.create(
         model="gpt-4o-mini",
         max_tokens=512,
         messages=[
             {
+                "role": "system",
+                "content": (
+                    "당신은 학생의 코딩 학습을 돕는 멘토입니다. "
+                    "절대로 정답 코드나 정답 출력을 직접 알려주지 마세요. "
+                    "방향과 개념만 2~3줄로 간결하게 안내하세요."
+                ),
+            },
+            {
                 "role": "user",
                 "content": (
                     f"아래 문제에서 학생의 {language} 코드가 일부 테스트를 통과하지 못했습니다.\n\n"
                     f"## 문제\n{problem_content}\n\n"
-                    f"## 실패한 테스트\n{failed_summary}\n\n"
+                    f"## 실패한 테스트 (학생 출력만)\n{failed_summary}\n\n"
                     f"## 힌트 가이드\n{hint_guide}\n\n"
                     f"{language} 문법과 실행 방식을 기준으로만 2~3줄의 간결한 힌트를 작성하세요. "
                     f"다른 언어의 함수명이나 문법은 언급하지 마세요."
                 ),
-            }
+            },
         ],
     )
     return response.choices[0].message.content.strip()
@@ -328,23 +363,24 @@ for filepath in changed_files:
 
     if not basic_failed:
         try:
-            edge_cases = generate_edge_cases(problem_content, basic_cases, config, language)
+            edge_cases, is_static = generate_edge_inputs(problem_content, basic_cases, config)
             edge_rows = []
             edge_failed = []
 
             for tc in edge_cases:
                 actual, err = run_code(filepath, tc["input"])
-                expected = tc["output"].strip()
                 if err:
                     actual = err
                     passed = False
+                elif is_static:
+                    passed = actual == tc["output"].strip()
                 else:
-                    passed = actual == expected
+                    passed = verify_output(problem_content, tc["input"], actual)
 
                 icon = "✅" if passed else "❌"
                 edge_rows.append(f"| {format_inline_code(tc['input'])} | {icon} |")
                 if not passed:
-                    failed_case = {"input": tc["input"], "expected": expected, "actual": actual}
+                    failed_case = {"input": tc["input"], "expected": tc.get("output", "(AI 판정 오답)"), "actual": actual}
                     edge_failed.append(failed_case)
                     all_failed.append(failed_case)
 
