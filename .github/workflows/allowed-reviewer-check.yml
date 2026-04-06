@@ -65,13 +65,15 @@ jobs:
               latestStateByUser.set(review.user.login, review.state);
             }
 
+            const prAuthor = pr.user.login;
+
             const approvedAllowedReviewers = [...latestStateByUser.entries()]
-              .filter(([login, state]) => allowedReviewers.has(login) && state === 'APPROVED')
+              .filter(([login, state]) => allowedReviewers.has(login) && state === 'APPROVED' && login !== prAuthor)
               .map(([login]) => login);
 
             if (approvedAllowedReviewers.length === 0) {
               core.setFailed(
-                `허용된 리뷰어의 승인 1개가 필요합니다. 허용 리뷰어: ${[...allowedReviewers].join(', ')}`
+                `허용된 리뷰어(본인 제외)의 승인 1개가 필요합니다. 허용 리뷰어: ${[...allowedReviewers].filter(r => r !== prAuthor).join(', ')}`
               );
               return;
             }
