@@ -112,11 +112,6 @@ jobs:
               return;
             }
 
-            if (pullRequest.mergeStateStatus !== 'CLEAN') {
-              core.info(`PR #${pr.number} is not mergeable yet: ${pullRequest.mergeStateStatus}`);
-              return;
-            }
-
             let mergeMethod = 'squash';
             if (repository.squashMergeAllowed) {
               mergeMethod = 'squash';
@@ -124,6 +119,32 @@ jobs:
               mergeMethod = 'merge';
             } else if (repository.rebaseMergeAllowed) {
               mergeMethod = 'rebase';
+            }
+
+            const sleep = ms => new Promise(r => setTimeout(r, ms));
+            const maxRetries = 5;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+              const fresh = await github.graphql(
+                `query($owner: String!, $repo: String!, $number: Int!) {
+                  repository(owner: $owner, name: $repo) {
+                    pullRequest(number: $number) { mergeStateStatus }
+                  }
+                }`,
+                { owner, repo, number: pr.number }
+              );
+              const status = fresh.repository.pullRequest.mergeStateStatus;
+              core.info(`PR #${pr.number} mergeStateStatus: ${status} (attempt ${attempt}/${maxRetries})`);
+
+              if (status === 'CLEAN') break;
+              if (status === 'DIRTY' || status === 'UNKNOWN') {
+                core.info(`PR #${pr.number} is not mergeable: ${status}`);
+                return;
+              }
+              if (attempt === maxRetries) {
+                core.info(`PR #${pr.number} still not CLEAN after ${maxRetries} attempts. Giving up.`);
+                return;
+              }
+              await sleep(10000);
             }
 
             try {
