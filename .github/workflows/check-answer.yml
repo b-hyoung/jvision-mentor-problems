@@ -4,15 +4,38 @@ on:
   pull_request:
     paths:
       - 'answer/**'
+      - 'problems/**'
   pull_request_target:
     types: [closed]
     paths:
       - 'answer/**'
 
 jobs:
+  # 답안 외 파일만 변경된 PR은 즉시 통과
+  skip-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      has_answer: ${{ steps.filter.outputs.has_answer }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 답안 파일 변경 여부 확인
+        id: filter
+        run: |
+          ANSWER_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep '^answer/' | grep -v '\.gitkeep' || true)
+          if [ -n "$ANSWER_FILES" ]; then
+            echo "has_answer=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_answer=false" >> $GITHUB_OUTPUT
+          fi
+
   # PR 오픈/업데이트 시: AI 검토 코멘트
   check-answer:
-    if: github.event_name == 'pull_request'
+    needs: skip-check
+    if: github.event_name == 'pull_request' && needs.skip-check.outputs.has_answer == 'true'
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
