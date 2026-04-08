@@ -65,9 +65,8 @@ for filepath in new_files:
     title_match = re.search(r'^#\s+(.+)', content, re.MULTILINE)
     title = title_match.group(1).strip() if title_match else os.path.splitext(os.path.basename(filepath))[0]
 
-    # 문제 설명 파싱
-    desc_match = re.search(r'## 문제 설명\s+(.*?)(?=##|\Z)', content, re.DOTALL)
-    question = desc_match.group(1).strip() if desc_match else content.strip()
+    # MD 전체를 question으로 전달 (프론트에서 마크다운 렌더링)
+    question = content.strip()
 
     # 출제일 파싱 (없으면 오늘)
     date_match = re.search(r'## 출제일\s+(\d{4}-\d{2}-\d{2})', content)
