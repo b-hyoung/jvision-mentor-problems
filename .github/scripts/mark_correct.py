@@ -5,7 +5,31 @@ PR 작성자의 GitHub 아이디로 유저 조회 후 정답 처리
 import os
 import re
 import json
+import time
 import urllib.request
+
+MAX_RETRIES = 3
+RETRY_DELAY = 10
+
+
+def request_with_retry(req, retries=MAX_RETRIES):
+    """Railway MySQL 슬립 대응: 실패 시 재시도"""
+    for attempt in range(1, retries + 1):
+        try:
+            with urllib.request.urlopen(req) as resp:
+                return json.loads(resp.read())
+        except urllib.error.HTTPError as e:
+            if e.code == 500 and attempt < retries:
+                print(f"⚠️ 서버 500 에러, {RETRY_DELAY}초 후 재시도 ({attempt}/{retries})")
+                time.sleep(RETRY_DELAY)
+                continue
+            raise
+        except urllib.error.URLError as e:
+            if attempt < retries:
+                print(f"⚠️ 연결 실패, {RETRY_DELAY}초 후 재시도 ({attempt}/{retries}): {e}")
+                time.sleep(RETRY_DELAY)
+                continue
+            raise
 
 CARTEL_API_URL = os.environ["CARTEL_API_URL"].rstrip("/")
 WEBHOOK_SECRET = os.environ["WEBHOOK_SECRET"]
@@ -50,9 +74,10 @@ for problem_name in problem_names:
     req.add_header("X-GitHub-Token", WEBHOOK_SECRET)
 
     try:
-        with urllib.request.urlopen(req) as resp:
-            result = json.loads(resp.read())
-            print(f"✅ 정답 처리 완료: {github_username} / {problem_name}")
+        result = request_with_retry(req)
+        print(f"✅ 정답 처리 완료: {github_username} / {problem_name}")
     except urllib.error.HTTPError as e:
         body = e.read().decode()
         print(f"❌ 정답 처리 실패 ({github_username}/{problem_name}): {e.code} {body}")
+    except Exception as e:
+        print(f"❌ 정답 처리 실패 ({github_username}/{problem_name}): {e}")
