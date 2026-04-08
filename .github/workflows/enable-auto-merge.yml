@@ -62,9 +62,11 @@ jobs:
               per_page: 100,
             });
 
-            const hasAnswerChange = files.some(file => file.filename.startsWith('answer/'));
-            if (!hasAnswerChange) {
-              core.info(`PR #${pr.number} has no answer changes. Skipping.`);
+            const hasTargetChange = files.some(file =>
+              file.filename.startsWith('answer/') || file.filename.startsWith('problems/')
+            );
+            if (!hasTargetChange) {
+              core.info(`PR #${pr.number} has no answer/problems changes. Skipping.`);
               return;
             }
 
