@@ -407,7 +407,7 @@ for filepath in changed_files:
 
     for tc in basic_cases:
         actual, err = run_code(filepath, tc["input"])
-        expected = tc["output"].strip()
+        expected = tc["output"].strip("\n")
         if err:
             actual = err
             passed = False
@@ -436,7 +436,7 @@ for filepath in changed_files:
                     actual = err
                     passed = False
                 elif is_static:
-                    passed = actual == tc["output"].strip()
+                    passed = actual == tc["output"].strip("\n")
                 else:
                     passed = verify_output(problem_content, tc["input"], actual)
 
