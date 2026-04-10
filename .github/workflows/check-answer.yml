@@ -1,0 +1,110 @@
+name: AI 답안 검토
+
+on:
+  pull_request:
+    paths:
+      - 'answer/**'
+      - 'problems/**'
+  pull_request_target:
+    types: [closed]
+    paths:
+      - 'answer/**'
+
+jobs:
+  # 답안 외 파일만 변경된 PR은 즉시 통과
+  skip-check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    outputs:
+      has_answer: ${{ steps.filter.outputs.has_answer }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: 답안 파일 변경 여부 확인
+        id: filter
+        run: |
+          ANSWER_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep '^answer/' | grep -v '\.gitkeep' || true)
+          if [ -n "$ANSWER_FILES" ]; then
+            echo "has_answer=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_answer=false" >> $GITHUB_OUTPUT
+          fi
+
+  # PR 오픈/업데이트 시: AI 검토 코멘트
+  check-answer:
+    needs: skip-check
+    if: github.event_name == 'pull_request' && needs.skip-check.outputs.has_answer == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 변경된 답안 파일 목록 추출
+        id: changed-files
+        run: |
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            | grep '^answer/' \
+            | grep -v '\.gitkeep' || true)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 의존성 설치
+        run: pip install openai
+
+      - name: AI 답안 검토 실행
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          CHANGED_FILES: ${{ steps.changed-files.outputs.files }}
+        run: python .github/scripts/check_answer.py
+
+  # PR 머지 완료 시: Cartel_Lab 정답 처리
+  mark-correct:
+    if: github.event_name == 'pull_request_target' && github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: master
+          fetch-depth: 2
+
+      - name: 머지된 답안 파일 목록 추출
+        id: merged-files
+        run: |
+          FILES=$(git diff --name-only HEAD~1 HEAD \
+            | grep '^answer/' \
+            | grep -v '\.gitkeep' || true)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Python 설정
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Cartel_Lab 정답 처리
+        if: steps.merged-files.outputs.files != ''
+        env:
+          CARTEL_API_URL: ${{ secrets.CARTEL_API_URL }}
+          WEBHOOK_SECRET: ${{ secrets.WEBHOOK_SECRET }}
+          MERGED_FILES: ${{ steps.merged-files.outputs.files }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+        run: python .github/scripts/mark_correct.py
